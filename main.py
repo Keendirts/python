@@ -1,22 +1,18 @@
 import os
 import csv
 import json
-from collections import Counter
+
 
 class FileManager:
     def __init__(self, filename):
         self.filename = filename
 
     def check_file(self):
-        if os.path.exists(self.filename):
-            print(f"File found: {self.filename}")
-            return True
-        print(f"Error: {self.filename} not found.")
-        return False
+        return os.path.exists(self.filename)
 
     def create_output_folder(self):
-        os.makedirs("output", exist_ok=True)
-        print("Output folder ready.")
+        if not os.path.exists("output"):
+            os.makedirs("output")
 
 
 class DataLoader:
@@ -28,18 +24,14 @@ class DataLoader:
         try:
             with open(self.filename, "r", encoding="utf-8") as f:
                 self.students = list(csv.DictReader(f))
-            print(f"Loaded {len(self.students)} students")
-            return True
+            return self.students
         except FileNotFoundError:
-            print(f"Error: {self.filename} not found.")
-            return False
+            print("File not found")
+            return []
 
     def preview(self, n=5):
-        print("\nFirst 5 rows:")
-        print("-" * 50)
         for s in self.students[:n]:
-            print(f"{s['student_id']} | {s['age']} | {s['gender']} | {s['country']} | GPA: {s['GPA']}")
-        print("-" * 50)
+            print(s["student_id"], s["country"], s["GPA"])
 
 
 class DataAnalyser:
@@ -48,50 +40,70 @@ class DataAnalyser:
         self.result = {}
 
     def analyse(self):
-        country_counts = Counter()
-        for s in self.students:
-            try:
-                float(s["GPA"])
-                float(s["class_attendance_percent"])
-                country_counts[s["country"]] += 1
-            except ValueError:
-                print(f"Warning: invalid data for student {s.get('student_id', '?')}")
+        print("Not implemented — use a child class")
 
-        top_3 = country_counts.most_common(3)
+    def print_results(self):
+        for key, value in self.result.items():
+            print(f"{key}: {value}")
+
+    def __str__(self):
+        return f"DataAnalyser: base class, {len(self.students)} students"
+
+
+class CountryAnalyser(DataAnalyser):
+    def __init__(self, students):
+        super().__init__(students)
+
+    def analyse(self):
+        counts = {}
+
+        for s in self.students:
+            country = s["country"]
+            counts[country] = counts.get(country, 0) + 1
+
+        top_3 = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:3]
 
         self.result = {
             "analysis": "Country Analysis",
             "total_students": len(self.students),
-            "total_countries": len(country_counts),
-            "top_3_countries": [{"country": c, "count": n} for c, n in top_3],
-            "all_countries": dict(country_counts)
+            "total_countries": len(counts),
+            "top_3_countries": top_3
         }
-        return self.result
-
-    def lambda_map_filter_demo(self):
-        print("\nLambda / Map / Filter Demo")
-        print("-" * 30)
-        high_gpa = list(filter(lambda s: float(s["GPA"]) > 3.5, self.students))
-        gpa_values = list(map(lambda s: float(s["GPA"]), self.students))
-        good_attendance = list(filter(lambda s: float(s["class_attendance_percent"]) > 90, self.students))
-
-        print(f"Students with GPA > 3.5: {len(high_gpa)}")
-        print(f"GPA values (first 5): {gpa_values[:5]}")
-        print(f"Students attendance > 90%: {len(good_attendance)}")
-        print("-" * 30)
 
     def print_results(self):
-        print("\n" + "=" * 30)
-        print("ANALYSIS RESULT")
         print("=" * 30)
-        print(f"Analysis: {self.result['analysis']}")
-        print(f"Total students: {self.result['total_students']}")
-        print(f"Total countries: {self.result['total_countries']}")
-        print("-" * 30)
-        print("Top 3 Countries:")
-        for i, item in enumerate(self.result["top_3_countries"], 1):
-            print(f"{i}. {item['country']}: {item['count']}")
+        print("COUNTRY ANALYSIS REPORT")
         print("=" * 30)
+        super().print_results()
+        print("=" * 30)
+
+    def __str__(self):
+        return f"CountryAnalyser: Country Analysis, {len(self.students)} students"
+
+
+class GpaAnalyser(DataAnalyser):
+    def __init__(self, students):
+        super().__init__(students)
+
+    def analyse(self):
+        gpas = [float(s["GPA"]) for s in self.students]
+
+        self.result = {
+            "analysis": "GPA Analysis",
+            "average_gpa": round(sum(gpas) / len(gpas), 2),
+            "max_gpa": max(gpas),
+            "min_gpa": min(gpas)
+        }
+
+    def print_results(self):
+        print("=" * 30)
+        print("GPA ANALYSIS REPORT")
+        print("=" * 30)
+        super().print_results()
+        print("=" * 30)
+
+    def __str__(self):
+        return f"GpaAnalyser: GPA Statistics, {len(self.students)} students"
 
 
 class ResultSaver:
@@ -105,29 +117,52 @@ class ResultSaver:
         print(f"Result saved to {self.output_path}")
 
 
+class Report:
+    def __init__(self, analyser, saver):
+        self.analyser = analyser
+        self.saver = saver
+
+    def generate(self):
+        print("Generating report...")
+        self.analyser.analyse()
+        self.analyser.print_results()
+        self.saver.result = self.analyser.result
+        self.saver.save_json()
+        print("Report complete.")
+
+
 def main():
-    filename = "students.csv"
-    fm = FileManager(filename)
+    fm = FileManager("students.csv")
+
     if not fm.check_file():
-        print("Stopping program.")
+        print("students.csv not found")
         return
 
     fm.create_output_folder()
 
-    dl = DataLoader(filename)
-    if not dl.load():
-        print("Stopping program.")
+    dl = DataLoader("students.csv")
+    students = dl.load()
+
+    if not students:
         return
 
     dl.preview()
 
-    analyser = DataAnalyser(dl.students)
-    analyser.analyse()
-    analyser.print_results()
-    analyser.lambda_map_filter_demo()   # ← исправлено!
+    analysers = [
+        CountryAnalyser(students),
+        GpaAnalyser(students[:10])
+    ]
 
-    saver = ResultSaver(analyser.result, "output/result.json")
-    saver.save_json()
+    print("Running all analysers:")
+
+    for analyser in analysers:
+        print(analyser)
+        analyser.analyse()
+        analyser.print_results()
+
+    saver = ResultSaver({}, "output/result.json")
+    report = Report(analysers[0], saver)
+    report.generate()
 
 
 if __name__ == "__main__":
